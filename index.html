@@ -1,0 +1,420 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sentence Syntax Parse Game</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    .word-btn { transition: all 0.15s; }
+    .word-btn:hover { transform: translateY(-2px); }
+    .tag-pill { font-size: 0.65rem; padding: 1px 6px; border-radius: 9999px; display: inline-block; margin-top: 2px; }
+  </style>
+</head>
+<body class="bg-gray-900 min-h-screen p-4">
+<div class="max-w-3xl mx-auto">
+  <h1 class="text-3xl font-bold text-white text-center mb-1">Sentence Syntax Parse Game</h1>
+  <p class="text-gray-400 text-center mb-4 text-sm">Assign the correct part of speech to each word!</p>
+
+  <div class="flex justify-between items-center text-gray-300 mb-4 bg-gray-800 rounded-xl px-4 py-2">
+    <span>Sentence: <span id="s-num" class="text-white font-bold">1</span>/20</span>
+    <span>Score: <span id="score-disp" class="text-yellow-400 font-bold">0</span>/<span id="max-score-disp">0</span></span>
+    <span>Accuracy: <span id="accuracy-disp" class="text-green-400 font-bold">-</span></span>
+  </div>
+
+  <div class="bg-gray-800 rounded-2xl p-5 mb-4">
+    <p class="text-gray-400 text-xs uppercase tracking-wide mb-3">Label each word with its part of speech:</p>
+    <div id="words-area" class="flex flex-wrap gap-3 mb-4 min-h-16"></div>
+    <div id="progress-msg" class="text-gray-500 text-sm"></div>
+  </div>
+
+  <!-- POS Tag Selector -->
+  <div class="bg-gray-800 rounded-2xl p-4 mb-4">
+    <p class="text-gray-400 text-xs mb-2">Selected word: <span id="selected-word" class="text-white font-semibold">click a word above</span></p>
+    <div id="pos-buttons" class="flex flex-wrap gap-2"></div>
+  </div>
+
+  <!-- Check & Feedback -->
+  <div class="flex gap-3 mb-4">
+    <button id="check-btn" class="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-xl font-bold" aria-label="Check answers">Check Answers</button>
+    <button id="next-btn" class="hidden flex-1 bg-gray-600 hover:bg-gray-500 text-white py-3 rounded-xl font-bold" aria-label="Next sentence">Next →</button>
+  </div>
+
+  <div id="feedback-area" class="hidden bg-gray-800 rounded-2xl p-4 mb-4">
+    <p id="feedback-title" class="font-bold text-lg mb-3"></p>
+    <div id="word-feedback" class="flex flex-wrap gap-2 mb-3"></div>
+    <div id="explanation-area" class="text-sm text-gray-300"></div>
+  </div>
+
+  <!-- Final screen -->
+  <div id="final-screen" class="hidden bg-gray-800 rounded-2xl p-8 text-center">
+    <h2 class="text-3xl font-bold text-white mb-4">All Done!</h2>
+    <div class="text-5xl font-bold text-yellow-400 mb-2" id="final-pct"></div>
+    <p class="text-gray-300 mb-2" id="final-pts"></p>
+    <p class="text-gray-400 text-sm mb-6" id="final-grade"></p>
+    <button id="restart-btn" class="bg-green-600 hover:bg-green-700 text-white px-8 py-3 rounded-xl text-lg font-bold" aria-label="Play again">Play Again</button>
+  </div>
+</div>
+
+<script>
+const POS_TAGS = ['Noun','Verb','Adjective','Adverb','Preposition','Article','Conjunction','Pronoun'];
+const TAG_COLORS = {
+  Noun: 'bg-blue-700 text-blue-100',
+  Verb: 'bg-green-700 text-green-100',
+  Adjective: 'bg-purple-700 text-purple-100',
+  Adverb: 'bg-yellow-700 text-yellow-100',
+  Preposition: 'bg-orange-700 text-orange-100',
+  Article: 'bg-gray-600 text-gray-100',
+  Conjunction: 'bg-pink-700 text-pink-100',
+  Pronoun: 'bg-teal-700 text-teal-100',
+};
+
+const SENTENCES = [
+  {
+    sentence: 'The quick brown fox jumps over the lazy dog.',
+    tokens: [
+      {w:'The',pos:'Article'},{w:'quick',pos:'Adjective'},{w:'brown',pos:'Adjective'},
+      {w:'fox',pos:'Noun'},{w:'jumps',pos:'Verb'},{w:'over',pos:'Preposition'},
+      {w:'the',pos:'Article'},{w:'lazy',pos:'Adjective'},{w:'dog',pos:'Noun'}
+    ],
+    notes: '"quickly" would be an Adverb, but "quick" here is an Adjective modifying "fox".'
+  },
+  {
+    sentence: 'She runs very quickly through the park.',
+    tokens: [
+      {w:'She',pos:'Pronoun'},{w:'runs',pos:'Verb'},{w:'very',pos:'Adverb'},
+      {w:'quickly',pos:'Adverb'},{w:'through',pos:'Preposition'},
+      {w:'the',pos:'Article'},{w:'park',pos:'Noun'}
+    ],
+    notes: '"quickly" modifies "runs" so it is an Adverb, not an Adjective. "very" modifies "quickly" — also an Adverb.'
+  },
+  {
+    sentence: 'Bright stars shine above the silent city.',
+    tokens: [
+      {w:'Bright',pos:'Adjective'},{w:'stars',pos:'Noun'},{w:'shine',pos:'Verb'},
+      {w:'above',pos:'Preposition'},{w:'the',pos:'Article'},
+      {w:'silent',pos:'Adjective'},{w:'city',pos:'Noun'}
+    ],
+    notes: '"Bright" and "silent" are Adjectives modifying nouns.'
+  },
+  {
+    sentence: 'He and I walked slowly toward the old house.',
+    tokens: [
+      {w:'He',pos:'Pronoun'},{w:'and',pos:'Conjunction'},{w:'I',pos:'Pronoun'},
+      {w:'walked',pos:'Verb'},{w:'slowly',pos:'Adverb'},{w:'toward',pos:'Preposition'},
+      {w:'the',pos:'Article'},{w:'old',pos:'Adjective'},{w:'house',pos:'Noun'}
+    ],
+    notes: '"and" is a coordinating Conjunction joining two pronouns. "slowly" is an Adverb.'
+  },
+  {
+    sentence: 'A large bird flew gracefully between the tall trees.',
+    tokens: [
+      {w:'A',pos:'Article'},{w:'large',pos:'Adjective'},{w:'bird',pos:'Noun'},
+      {w:'flew',pos:'Verb'},{w:'gracefully',pos:'Adverb'},{w:'between',pos:'Preposition'},
+      {w:'the',pos:'Article'},{w:'tall',pos:'Adjective'},{w:'trees',pos:'Noun'}
+    ],
+    notes: '"gracefully" modifies the verb "flew" so it is an Adverb.'
+  },
+  {
+    sentence: 'The teacher speaks clearly but the students often sleep.',
+    tokens: [
+      {w:'The',pos:'Article'},{w:'teacher',pos:'Noun'},{w:'speaks',pos:'Verb'},
+      {w:'clearly',pos:'Adverb'},{w:'but',pos:'Conjunction'},{w:'the',pos:'Article'},
+      {w:'students',pos:'Noun'},{w:'often',pos:'Adverb'},{w:'sleep',pos:'Verb'}
+    ],
+    notes: '"clearly" and "often" are both Adverbs. "but" is a coordinating Conjunction.'
+  },
+  {
+    sentence: 'They are extremely happy about the new result.',
+    tokens: [
+      {w:'They',pos:'Pronoun'},{w:'are',pos:'Verb'},{w:'extremely',pos:'Adverb'},
+      {w:'happy',pos:'Adjective'},{w:'about',pos:'Preposition'},
+      {w:'the',pos:'Article'},{w:'new',pos:'Adjective'},{w:'result',pos:'Noun'}
+    ],
+    notes: '"extremely" modifies the Adjective "happy" — it is an Adverb, not an Adjective.'
+  },
+  {
+    sentence: 'An ancient map was found inside the dusty library.',
+    tokens: [
+      {w:'An',pos:'Article'},{w:'ancient',pos:'Adjective'},{w:'map',pos:'Noun'},
+      {w:'was',pos:'Verb'},{w:'found',pos:'Verb'},{w:'inside',pos:'Preposition'},
+      {w:'the',pos:'Article'},{w:'dusty',pos:'Adjective'},{w:'library',pos:'Noun'}
+    ],
+    notes: '"An" is an Article. "was found" is a two-part Verb phrase (passive voice).'
+  },
+  {
+    sentence: 'We often walk along the beautiful river in summer.',
+    tokens: [
+      {w:'We',pos:'Pronoun'},{w:'often',pos:'Adverb'},{w:'walk',pos:'Verb'},
+      {w:'along',pos:'Preposition'},{w:'the',pos:'Article'},{w:'beautiful',pos:'Adjective'},
+      {w:'river',pos:'Noun'},{w:'in',pos:'Preposition'},{w:'summer',pos:'Noun'}
+    ],
+    notes: '"often" is an Adverb of frequency. "along" and "in" are Prepositions.'
+  },
+  {
+    sentence: 'It suddenly became dark and the loud thunder scared us.',
+    tokens: [
+      {w:'It',pos:'Pronoun'},{w:'suddenly',pos:'Adverb'},{w:'became',pos:'Verb'},
+      {w:'dark',pos:'Adjective'},{w:'and',pos:'Conjunction'},{w:'the',pos:'Article'},
+      {w:'loud',pos:'Adjective'},{w:'thunder',pos:'Noun'},{w:'scared',pos:'Verb'},
+      {w:'us',pos:'Pronoun'}
+    ],
+    notes: '"dark" is an Adjective (predicate adjective after "became"). "us" is a Pronoun (object).'
+  },
+  {
+    sentence: 'The tiny kitten hid quietly under a warm blanket.',
+    tokens: [
+      {w:'The',pos:'Article'},{w:'tiny',pos:'Adjective'},{w:'kitten',pos:'Noun'},
+      {w:'hid',pos:'Verb'},{w:'quietly',pos:'Adverb'},{w:'under',pos:'Preposition'},
+      {w:'a',pos:'Article'},{w:'warm',pos:'Adjective'},{w:'blanket',pos:'Noun'}
+    ],
+    notes: '"quietly" describes how the kitten hid — an Adverb.'
+  },
+  {
+    sentence: 'Neither he nor she arrived early at the conference.',
+    tokens: [
+      {w:'Neither',pos:'Conjunction'},{w:'he',pos:'Pronoun'},{w:'nor',pos:'Conjunction'},
+      {w:'she',pos:'Pronoun'},{w:'arrived',pos:'Verb'},{w:'early',pos:'Adverb'},
+      {w:'at',pos:'Preposition'},{w:'the',pos:'Article'},{w:'conference',pos:'Noun'}
+    ],
+    notes: '"Neither...nor" is a correlative Conjunction pair. "early" is an Adverb here.'
+  },
+  {
+    sentence: 'The honest politician spoke frankly about the serious problems.',
+    tokens: [
+      {w:'The',pos:'Article'},{w:'honest',pos:'Adjective'},{w:'politician',pos:'Noun'},
+      {w:'spoke',pos:'Verb'},{w:'frankly',pos:'Adverb'},{w:'about',pos:'Preposition'},
+      {w:'the',pos:'Article'},{w:'serious',pos:'Adjective'},{w:'problems',pos:'Noun'}
+    ],
+    notes: '"frankly" is an Adverb (-ly suffix on adjective "frank"). "honest" and "serious" are Adjectives.'
+  },
+  {
+    sentence: 'You must eat well before your long journey.',
+    tokens: [
+      {w:'You',pos:'Pronoun'},{w:'must',pos:'Verb'},{w:'eat',pos:'Verb'},
+      {w:'well',pos:'Adverb'},{w:'before',pos:'Preposition'},
+      {w:'your',pos:'Pronoun'},{w:'long',pos:'Adjective'},{w:'journey',pos:'Noun'}
+    ],
+    notes: '"well" modifies "eat" — it is an Adverb, not an Adjective. "your" is a possessive Pronoun.'
+  },
+  {
+    sentence: 'She carefully placed the fragile glass on a clean shelf.',
+    tokens: [
+      {w:'She',pos:'Pronoun'},{w:'carefully',pos:'Adverb'},{w:'placed',pos:'Verb'},
+      {w:'the',pos:'Article'},{w:'fragile',pos:'Adjective'},{w:'glass',pos:'Noun'},
+      {w:'on',pos:'Preposition'},{w:'a',pos:'Article'},{w:'clean',pos:'Adjective'},
+      {w:'shelf',pos:'Noun'}
+    ],
+    notes: '"fragile" and "clean" are Adjectives. "carefully" is an Adverb describing the verb.'
+  },
+  {
+    sentence: 'The old but reliable car crossed the steep hill.',
+    tokens: [
+      {w:'The',pos:'Article'},{w:'old',pos:'Adjective'},{w:'but',pos:'Conjunction'},
+      {w:'reliable',pos:'Adjective'},{w:'car',pos:'Noun'},{w:'crossed',pos:'Verb'},
+      {w:'the',pos:'Article'},{w:'steep',pos:'Adjective'},{w:'hill',pos:'Noun'}
+    ],
+    notes: '"but" here is a coordinating Conjunction joining two adjectives modifying "car".'
+  },
+  {
+    sentence: 'I immediately called him after I heard the terrible news.',
+    tokens: [
+      {w:'I',pos:'Pronoun'},{w:'immediately',pos:'Adverb'},{w:'called',pos:'Verb'},
+      {w:'him',pos:'Pronoun'},{w:'after',pos:'Conjunction'},{w:'I',pos:'Pronoun'},
+      {w:'heard',pos:'Verb'},{w:'the',pos:'Article'},{w:'terrible',pos:'Adjective'},
+      {w:'news',pos:'Noun'}
+    ],
+    notes: '"after" here introduces a time clause — it is a Conjunction (subordinating). "immediately" is an Adverb.'
+  },
+  {
+    sentence: 'The music played softly inside the dimly lit room.',
+    tokens: [
+      {w:'The',pos:'Article'},{w:'music',pos:'Noun'},{w:'played',pos:'Verb'},
+      {w:'softly',pos:'Adverb'},{w:'inside',pos:'Preposition'},{w:'the',pos:'Article'},
+      {w:'dimly',pos:'Adverb'},{w:'lit',pos:'Adjective'},{w:'room',pos:'Noun'}
+    ],
+    notes: '"dimly" is an Adverb modifying the Adjective "lit". "lit" functions as an Adjective here.'
+  },
+  {
+    sentence: 'Both cats and dogs can be loyal and affectionate pets.',
+    tokens: [
+      {w:'Both',pos:'Conjunction'},{w:'cats',pos:'Noun'},{w:'and',pos:'Conjunction'},
+      {w:'dogs',pos:'Noun'},{w:'can',pos:'Verb'},{w:'be',pos:'Verb'},
+      {w:'loyal',pos:'Adjective'},{w:'and',pos:'Conjunction'},{w:'affectionate',pos:'Adjective'},
+      {w:'pets',pos:'Noun'}
+    ],
+    notes: '"Both...and" is a correlative Conjunction. "loyal" and "affectionate" are predicate Adjectives.'
+  },
+  {
+    sentence: 'He never works hard enough despite his natural talent.',
+    tokens: [
+      {w:'He',pos:'Pronoun'},{w:'never',pos:'Adverb'},{w:'works',pos:'Verb'},
+      {w:'hard',pos:'Adverb'},{w:'enough',pos:'Adverb'},{w:'despite',pos:'Preposition'},
+      {w:'his',pos:'Pronoun'},{w:'natural',pos:'Adjective'},{w:'talent',pos:'Noun'}
+    ],
+    notes: '"hard" here is an Adverb (modifies "works"), not an Adjective. "despite" is a Preposition.'
+  }
+];
+
+let currentS = 0;
+let totalScore = 0;
+let totalMax = 0;
+let userLabels = {};
+let selectedWordIdx = null;
+let checked = false;
+
+function renderSentence() {
+  checked = false;
+  userLabels = {};
+  selectedWordIdx = null;
+  const s = SENTENCES[currentS];
+  document.getElementById('s-num').textContent = currentS + 1;
+  const maxPts = s.tokens.length;
+  totalMax += maxPts;
+  document.getElementById('max-score-disp').textContent = totalMax;
+
+  const area = document.getElementById('words-area');
+  area.innerHTML = '';
+  s.tokens.forEach((tok, i) => {
+    const div = document.createElement('div');
+    div.className = 'flex flex-col items-center cursor-pointer word-btn';
+    div.setAttribute('role', 'button');
+    div.setAttribute('aria-label', `Select word ${tok.w}`);
+    div.dataset.idx = i;
+
+    const word = document.createElement('span');
+    word.className = 'bg-gray-600 text-white px-3 py-2 rounded-lg font-mono text-lg select-none';
+    word.textContent = tok.w;
+
+    const tag = document.createElement('span');
+    tag.className = 'tag-pill bg-gray-700 text-gray-400';
+    tag.id = `tag-${i}`;
+    tag.textContent = '?';
+
+    div.appendChild(word);
+    div.appendChild(tag);
+    div.addEventListener('click', () => selectWord(i));
+    area.appendChild(div);
+  });
+
+  document.getElementById('selected-word').textContent = 'click a word above';
+  document.getElementById('progress-msg').textContent = `Label all ${s.tokens.length} words`;
+  document.getElementById('feedback-area').classList.add('hidden');
+  document.getElementById('check-btn').classList.remove('hidden');
+  document.getElementById('next-btn').classList.add('hidden');
+  document.getElementById('check-btn').disabled = false;
+  renderAccuracy();
+}
+
+function selectWord(idx) {
+  if (checked) return;
+  selectedWordIdx = idx;
+  const s = SENTENCES[currentS];
+  document.getElementById('selected-word').textContent = s.tokens[idx].w;
+  document.querySelectorAll('.word-btn').forEach((d, i) => {
+    const span = d.querySelector('span:first-child');
+    span.className = i === idx
+      ? 'bg-blue-600 text-white px-3 py-2 rounded-lg font-mono text-lg select-none ring-2 ring-blue-400'
+      : 'bg-gray-600 text-white px-3 py-2 rounded-lg font-mono text-lg select-none';
+  });
+}
+
+// Build POS buttons
+const posDiv = document.getElementById('pos-buttons');
+POS_TAGS.forEach(pos => {
+  const btn = document.createElement('button');
+  btn.className = `${TAG_COLORS[pos]} px-3 py-1 rounded-lg text-sm font-semibold hover:opacity-80`;
+  btn.textContent = pos;
+  btn.setAttribute('aria-label', `Tag as ${pos}`);
+  btn.addEventListener('click', () => applyTag(pos));
+  posDiv.appendChild(btn);
+});
+
+function applyTag(pos) {
+  if (selectedWordIdx === null || checked) return;
+  userLabels[selectedWordIdx] = pos;
+  const tag = document.getElementById(`tag-${selectedWordIdx}`);
+  tag.textContent = pos;
+  tag.className = `tag-pill ${TAG_COLORS[pos]}`;
+
+  const s = SENTENCES[currentS];
+  const labeled = Object.keys(userLabels).length;
+  document.getElementById('progress-msg').textContent = `${labeled}/${s.tokens.length} words labeled`;
+}
+
+document.getElementById('check-btn').addEventListener('click', () => {
+  const s = SENTENCES[currentS];
+  checked = true;
+  let pts = 0;
+  const wf = document.getElementById('word-feedback');
+  wf.innerHTML = '';
+  s.tokens.forEach((tok, i) => {
+    const userPOS = userLabels[i] || '?';
+    const correct = userPOS === tok.pos;
+    if (correct) pts++;
+
+    // Update tag display
+    const tag = document.getElementById(`tag-${i}`);
+    if (correct) {
+      tag.className = `tag-pill bg-green-600 text-white`;
+      tag.textContent = tok.pos;
+    } else {
+      tag.className = `tag-pill bg-red-600 text-white`;
+      tag.textContent = `${userPOS}→${tok.pos}`;
+    }
+
+    // Feedback pills
+    const pill = document.createElement('span');
+    pill.className = `text-xs px-2 py-1 rounded-full ${correct ? 'bg-green-800 text-green-200' : 'bg-red-800 text-red-200'}`;
+    pill.textContent = `${tok.w}: ${correct ? '✓' : `✗ ${userPOS || '?'} → ${tok.pos}`}`;
+    wf.appendChild(pill);
+  });
+
+  totalScore += pts;
+  document.getElementById('score-disp').textContent = totalScore;
+  renderAccuracy();
+
+  const fa = document.getElementById('feedback-area');
+  fa.classList.remove('hidden');
+  const ft = document.getElementById('feedback-title');
+  ft.textContent = `${pts}/${s.tokens.length} correct`;
+  ft.className = `font-bold text-lg mb-3 ${pts === s.tokens.length ? 'text-green-400' : pts >= s.tokens.length / 2 ? 'text-yellow-400' : 'text-red-400'}`;
+  document.getElementById('explanation-area').textContent = s.notes;
+
+  document.getElementById('check-btn').classList.add('hidden');
+  if (currentS < SENTENCES.length - 1) {
+    document.getElementById('next-btn').classList.remove('hidden');
+  } else {
+    setTimeout(showFinal, 500);
+  }
+});
+
+function renderAccuracy() {
+  if (totalMax === 0) { document.getElementById('accuracy-disp').textContent = '-'; return; }
+  document.getElementById('accuracy-disp').textContent = Math.round(totalScore / totalMax * 100) + '%';
+}
+
+document.getElementById('next-btn').addEventListener('click', () => {
+  currentS++;
+  renderSentence();
+});
+
+function showFinal() {
+  document.getElementById('final-screen').classList.remove('hidden');
+  document.getElementById('final-pct').textContent = Math.round(totalScore / totalMax * 100) + '%';
+  document.getElementById('final-pts').textContent = `${totalScore}/${totalMax} points`;
+  const pct = totalScore / totalMax;
+  let grade = pct >= 0.9 ? 'Grammar Master! A+' : pct >= 0.75 ? 'Excellent! A' : pct >= 0.6 ? 'Good work! B' : pct >= 0.4 ? 'Keep practicing! C' : 'Study more grammar! D';
+  document.getElementById('final-grade').textContent = grade;
+}
+
+document.getElementById('restart-btn').addEventListener('click', () => {
+  currentS = 0; totalScore = 0; totalMax = 0;
+  document.getElementById('final-screen').classList.add('hidden');
+  renderSentence();
+});
+
+renderSentence();
+</script>
+</body>
+</html>
